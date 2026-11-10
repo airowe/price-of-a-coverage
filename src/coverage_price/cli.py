@@ -13,6 +13,7 @@ from coverage_price.constants import BASELINE_OFFSET, MAX_PRED_ERROR_FT
 from coverage_price.depth import SKIP_REASONS, screener_defender_depth
 from coverage_price.loader import DataNotDownloadedError, list_games, load_aliases
 from coverage_price.pricing import price_by_coverage
+from coverage_price.replay import court_frames, render, typical_pick
 
 PICKS_AGGREGATE = Path("data") / "aggregates" / "acb_picksaggregates_20252026.csv"
 QUICK = {"n_boot": 100, "n_perm": 100}
@@ -33,6 +34,10 @@ def reproduce(data_dir: Path, out: Path, max_pred_error: float, quick: bool) -> 
     if not matches.is_dir():
         print(f"No data at {matches}. Run: bash scripts/download_data.sh", file=sys.stderr)
         return 2
+    games = list_games(data_dir)
+    if not games:
+        print(f"No games in {matches}. Run: bash scripts/download_data.sh", file=sys.stderr)
+        return 2
     started, effort = time.monotonic(), QUICK if quick else FULL
     aliases = load_aliases(data_dir)
     settings = [(max_pred_error, BASELINE_OFFSET)]
@@ -44,7 +49,6 @@ def reproduce(data_dir: Path, out: Path, max_pred_error: float, quick: bool) -> 
     spaces, depths, by_setting = [], [], {s: [] for s in settings}
     action_counts: dict[str, int] = {}
     depth_skipped = dict.fromkeys(SKIP_REASONS, 0)
-    games = list_games(data_dir)
     try:
         for game_dir in games:
             actions, frames = report.load_inputs(game_dir, aliases)
@@ -104,6 +108,31 @@ def reproduce(data_dir: Path, out: Path, max_pred_error: float, quick: bool) -> 
     return 0
 
 
+def replay(data_dir: Path, out: Path, action_id: str | None, coverage: str) -> int:
+    """Write a clip of one pick: a named action, or a typical one for a coverage."""
+    matches = data_dir / "data" / "matches"
+    if not matches.is_dir() or not list_games(data_dir):
+        print(f"No games in {matches}. Run: bash scripts/download_data.sh", file=sys.stderr)
+        return 2
+    aliases, games = load_aliases(data_dir), list_games(data_dir)
+    title = f"Ball screen {action_id}"
+    if action_id is None:
+        space = pd.concat([report.run_game(g, aliases)[0] for g in games], ignore_index=True)
+        action_id = typical_pick(space, coverage)
+        title = f"A typical ball screen against a {coverage}"
+    for game_dir in games:
+        try:
+            frames = court_frames(game_dir, aliases, action_id)
+        except KeyError:
+            continue
+        out.parent.mkdir(parents=True, exist_ok=True)
+        render(frames, out, title=title)
+        print(f"Wrote {out} ({action_id})")
+        return 0
+    print(f"No action {action_id} in {matches}", file=sys.stderr)
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="coverage-price", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -114,7 +143,14 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument(
         "--quick", action="store_true", help="few resamples, no sensitivity grid (smoke test)"
     )
+    clip = commands.add_parser("replay", help="draw one pick as moving dots (GIF or MP4)")
+    clip.add_argument("--data-dir", type=Path, default=Path("data/opendata-basketball"))
+    clip.add_argument("--out", type=Path, default=Path("results/replay.gif"))
+    clip.add_argument("--action-id", help="a pick id from the event data; default: a typical pick")
+    clip.add_argument("--coverage", default="show", help="coverage to pick a typical example of")
     args = parser.parse_args(argv)
+    if args.command == "replay":
+        return replay(args.data_dir, args.out, args.action_id, args.coverage)
     return reproduce(args.data_dir, args.out, args.max_pred_error, args.quick)
 
 

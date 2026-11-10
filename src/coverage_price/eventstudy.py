@@ -7,11 +7,12 @@ import pandas as pd
 
 from coverage_price.constants import BASELINE_OFFSET, MIN_PLAYERS_PER_SIDE, OFFSETS
 
+PERMUTATION_MIN_N = 40  # labels with fewer actions are left out of the permutation test
 SPACE_COLUMNS = [
-    "action_id", "game_id", "kind", "main_cov", "second_cov",
+    "action_id", "game_id", "kind", "main_cov", "second_cov", "direct",
     "role", "offset", "baseline_ft", "delta_ft",
 ]  # fmt: skip
-_META = ["action_id", "game_id", "kind", "main_cov", "second_cov"]
+_META = ["action_id", "game_id", "kind", "main_cov", "second_cov", "direct"]
 
 
 def _grid(actions: pd.DataFrame, offsets: Sequence[int]) -> pd.DataFrame:
@@ -29,7 +30,7 @@ def sides_for(actions: pd.DataFrame, offsets: Sequence[int] = OFFSETS) -> pd.Dat
     """Offensive and defensive team for each sampled frame, as `openness` expects."""
     grid = _grid(actions, offsets)
     sides = grid[["abs_frame", "off_team_id", "def_team_id"]].rename(columns={"abs_frame": "frame"})
-    return sides.drop_duplicates("frame").reset_index(drop=True)
+    return sides.drop_duplicates(["frame", "off_team_id"]).reset_index(drop=True)
 
 
 def space_created(
@@ -49,10 +50,16 @@ def space_created(
     """
     if actions.empty or open_long.empty:
         return pd.DataFrame(columns=SPACE_COLUMNS)
-    grid = _grid(actions[[*_META, "frame", "main_id", "second_id", "end_frame"]], offsets)
+    grid = _grid(
+        actions[[*_META, "frame", "main_id", "second_id", "end_frame", "off_team_id"]], offsets
+    )
     # A window that runs past the end of the chance would measure the next possession.
     grid = grid[grid.end_frame.isna() | (grid.abs_frame <= grid.end_frame)]
-    seen = grid.merge(open_long.rename(columns={"frame": "abs_frame"}), on="abs_frame", how="inner")
+    seen = grid.merge(
+        open_long.rename(columns={"frame": "abs_frame"}),
+        on=["abs_frame", "off_team_id"],
+        how="inner",
+    )
     seen["is_main"] = seen.player_id == seen.main_id
     seen["is_second"] = seen.player_id == seen.second_id
     key = ["action_id", "offset"]
@@ -169,7 +176,7 @@ def permutation_p(
     label_col: str,
     n_perm: int = 5000,
     seed: int = 0,
-    min_n: int = 40,
+    min_n: int = PERMUTATION_MIN_N,
 ) -> float:
     """P-value for "the labels' mean space created differ", shuffling labels within game.
 

@@ -13,6 +13,7 @@ from conftest import (
 )
 from coverage_price.actions import ACTION_COLUMNS
 from coverage_price.constants import BASELINE_OFFSET, MAX_PRED_ERROR_FT, OFFSETS
+from coverage_price.eventstudy import SPACE_COLUMNS as SPACE_COLUMNS_EXPECTED
 from coverage_price.eventstudy import frames_needed, sides_for, space_created
 from coverage_price.openness import openness
 
@@ -32,7 +33,8 @@ def _action(**overrides):
         "action_id": "pick-1", "kind": "pick", "game_id": GAME, "frame": ACTION_FRAME,
         "main_id": MAIN, "second_id": SECOND, "second_def_id": 12,
         "off_team_id": HOME, "def_team_id": AWAY, "main_cov": "over", "second_cov": "show",
-        "chance_id": "chance-1", "end_frame": np.nan, "loc_x": np.nan, "loc_y": np.nan,
+        "chance_id": "chance-1", "end_frame": np.nan, "direct": True,
+        "loc_x": np.nan, "loc_y": np.nan,
     }  # fmt: skip
     return pd.DataFrame([{**row, **overrides}], columns=ACTION_COLUMNS)
 
@@ -118,17 +120,23 @@ def test_second_role_absent_when_action_has_no_second_player():
 
 
 def test_other_max_excludes_main_and_second():
-    # Only the main player's defender moves away; "other" players stay at DEFAULT_GAP_FT.
+    # The defenders of the main and second players both move away; the other three
+    # offensive players stay at DEFAULT_GAP_FT.
     def frame(offset):
-        gap = DEFAULT_GAP_FT if offset <= 0 else DEFAULT_GAP_FT + 15.0
-        away = ((MAIN_XY[0] + gap, MAIN_XY[1]), *DEFAULT_AWAY_XY[1:])
+        extra = 0.0 if offset <= 0 else 15.0
+        away = (
+            (DEFAULT_AWAY_XY[0][0] + extra, DEFAULT_AWAY_XY[0][1]),
+            (DEFAULT_AWAY_XY[1][0] + extra, DEFAULT_AWAY_XY[1][1]),
+            *DEFAULT_AWAY_XY[2:],
+        )
         return live_frame(ACTION_FRAME + offset, away_xy=away)
 
     out = _run(_action(), frame)
     other = out[(out.role == "other_max") & (out.offset == AFTER)].iloc[0]
     main = out[(out.role == "main") & (out.offset == AFTER)].iloc[0]
+    second = out[(out.role == "second") & (out.offset == AFTER)].iloc[0]
     assert other.delta_ft == pytest.approx(0.0)
-    assert main.delta_ft > 0
+    assert main.delta_ft > 0 and second.delta_ft > 0
 
 
 def test_control_moment_has_team_roles_only():
@@ -264,3 +272,29 @@ def test_offsets_after_the_chance_ends_are_dropped():
 def test_unknown_chance_end_keeps_the_full_window():
     out = _run(_action(end_frame=np.nan), _static)
     assert out.offset.max() == max(OFFSETS)
+
+
+def test_main_player_absent_from_tracking_gives_no_rows_and_no_error():
+    from conftest import DEFAULT_HOME_XY as HOME_XY
+
+    # The main player (id 1) is not tracked at all, so every frame is short-handed.
+    out = _run(
+        _action(),
+        lambda o: live_frame(ACTION_FRAME + o, home_xy=((999.0, 999.0), *HOME_XY[1:])[1:]),
+    )
+    assert out.empty and list(out.columns) == list(SPACE_COLUMNS_EXPECTED)
+
+
+def test_two_teams_acting_in_the_same_frame_each_get_their_own_openness():
+    ours = _action()
+    theirs = _action(
+        action_id="pick-2", main_id=11, second_id=12, off_team_id=AWAY, def_team_id=HOME
+    )
+    actions = pd.concat([ours, theirs], ignore_index=True)
+    # Home's defenders are 20 ft away; shift one away player so away's team mean differs.
+    away_xy = ((DEFAULT_AWAY_XY[0][0] + 10.0, DEFAULT_AWAY_XY[0][1]), *DEFAULT_AWAY_XY[1:])
+    frames = [live_frame(ACTION_FRAME + o, away_xy=away_xy) for o in OFFSETS]
+    out = space_created(actions, openness(to_table(frames), sides_for(actions)))
+    base = out[out.role == "team_mean"].groupby("action_id").baseline_ft.first()
+    assert base["pick-1"] != pytest.approx(base["pick-2"])
+    assert set(out.action_id) == {"pick-1", "pick-2"}

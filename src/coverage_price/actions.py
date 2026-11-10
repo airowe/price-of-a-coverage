@@ -10,7 +10,7 @@ from coverage_price.constants import COVERAGE_NAMES
 ACTION_COLUMNS = [
     "action_id", "kind", "game_id", "frame", "main_id", "second_id", "second_def_id",
     "off_team_id", "def_team_id", "main_cov", "second_cov", "chance_id", "end_frame",
-    "loc_x", "loc_y",
+    "direct", "loc_x", "loc_y",
 ]  # fmt: skip
 
 # family -> (kind, frame, main player, second player, second player's defender,
@@ -52,7 +52,8 @@ def _location(table: pd.DataFrame, axis: int) -> pd.Series:
 def collect_actions(events: dict[str, pd.DataFrame], game_id: int) -> pd.DataFrame:
     """One row per pick, handoff, off-ball screen, drive, isolation and post.
 
-    `end_frame` is the last frame of the action's chance (null if unknown): after it the
+    `direct` is SkillCorner's flag for an action that led straight to a shot, assist or
+    foul; the season aggregates count only those. `end_frame` is the last frame of the action's chance (null if unknown): after it the
     possession is over and "offence" no longer means anything.
     """
     chances = events.get("chances")
@@ -82,6 +83,7 @@ def collect_actions(events: dict[str, pd.DataFrame], game_id: int) -> pd.DataFra
                 "second_cov": _coverage(table, second_cov),
                 "chance_id": _column(table, "chanceId"),
                 "end_frame": _column(table, "chanceId").map(chance_end).astype("float64"),
+                "direct": _column(table, "direct").fillna(0).astype(bool),
                 "loc_x": _location(table, 0),
                 "loc_y": _location(table, 1),
             })
@@ -124,6 +126,6 @@ def control_moments(
             "frame": frame, "main_id": np.nan, "second_id": np.nan, "second_def_id": np.nan,
             "off_team_id": chance.offTeamId, "def_team_id": chance.defTeamId,
             "main_cov": "none", "second_cov": "none", "chance_id": chance.id,
-            "end_frame": float(chance.endFrame), "loc_x": np.nan, "loc_y": np.nan,
+            "end_frame": float(chance.endFrame), "direct": False, "loc_x": np.nan, "loc_y": np.nan,
         })  # fmt: skip
     return pd.DataFrame(rows, columns=ACTION_COLUMNS)

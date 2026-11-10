@@ -1,8 +1,18 @@
+import pandas as pd
 import pytest
 
-from conftest import AWAY_IDS, DEFAULT_AWAY_XY, DEFAULT_HOME_XY, live_frame, sides_table, to_table
+from conftest import (
+    AWAY,
+    AWAY_IDS,
+    DEFAULT_AWAY_XY,
+    DEFAULT_HOME_XY,
+    HOME,
+    live_frame,
+    sides_table,
+    to_table,
+)
 from coverage_price.constants import MAX_PRED_ERROR_FT
-from coverage_price.openness import openness
+from coverage_price.openness import OPENNESS_COLUMNS, openness
 
 FRAME = 100
 SHOOTER, NEAREST_DEFENDER = 1, 11
@@ -30,7 +40,8 @@ def test_one_row_per_offensive_player_per_frame():
         to_table([live_frame(FRAME), live_frame(FRAME + 1)]), sides_table([FRAME, FRAME + 1])
     )
     assert len(out) == 10
-    assert list(out.columns) == ["frame", "player_id", "dist_ft", "defender_id", "eligible"]
+    assert list(out.columns) == OPENNESS_COLUMNS
+    assert set(out.off_team_id) == {HOME}
     assert not set(out.player_id) & set(AWAY_IDS)
 
 
@@ -75,9 +86,27 @@ def test_frame_missing_from_sides_is_dropped():
 
 
 def test_offence_and_defence_follow_the_sides_table():
-    from conftest import AWAY, HOME
-
     out = openness(
         to_table([live_frame(FRAME)]), sides_table([FRAME], off_team=AWAY, def_team=HOME)
     )
     assert set(out.player_id) == set(AWAY_IDS)
+
+
+def test_short_handed_offence_makes_every_row_ineligible():
+    from conftest import DEFAULT_HOME_XY as HOME_XY
+
+    out = openness(to_table([live_frame(FRAME, home_xy=HOME_XY[:4])]), sides_table([FRAME]))
+    assert len(out) == 4 and not out.eligible.any()
+
+
+def test_a_duplicated_player_row_does_not_count_as_a_fifth_player():
+    table = to_table([live_frame(FRAME, home_xy=DEFAULT_HOME_XY[:4])])
+    duplicate = table[table.player_id == SHOOTER]
+    out = openness(pd.concat([table, duplicate], ignore_index=True), sides_table([FRAME]))
+    assert len(out) == 4 and not out.eligible.any()
+
+
+def test_both_teams_can_be_on_offence_in_the_same_frame():
+    both = pd.concat([sides_table([FRAME]), sides_table([FRAME], off_team=AWAY, def_team=HOME)])
+    out = openness(to_table([live_frame(FRAME)]), both)
+    assert len(out) == 10 and set(out.off_team_id) == {HOME, AWAY}

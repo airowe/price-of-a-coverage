@@ -16,7 +16,7 @@ REAL_DATA = Path(__file__).parents[1] / "data" / "opendata-basketball"
 REAL_GAME = 114243
 TABLE_KEYS = {
     "curves", "pick_coverage", "gaps", "controls", "depth_by_label",
-    "depth_dose_response", "prices", "sensitivity",
+    "depth_dose_response", "prices", "sensitivity", "pick_coverage_direct",
 }  # fmt: skip
 
 
@@ -40,15 +40,15 @@ def _space(n_games=4, per_cell=40, seed=0):
                 for role in ("main", "second", "other_max", "team_mean"):
                     for offset in OFFSETS:
                         rows.append((
-                            f"pick-{game}-{cov}-{i}", game, "pick", "over", cov, role, offset,
-                            6.0, rng.normal(shift, 1.0),
+                            f"pick-{game}-{cov}-{i}", game, "pick", "over", cov, i % 2 == 0,
+                            role, offset, 6.0, rng.normal(shift, 1.0),
                         ))  # fmt: skip
         for i in range(10):
             for role in ("other_max", "team_mean"):
                 for offset in OFFSETS:
                     rows.append((
-                        f"control-{game}-{i}", game, "control", "none", "none", role, offset,
-                        6.0, rng.normal(0.0, 1.0),
+                        f"control-{game}-{i}", game, "control", "none", "none", False,
+                        role, offset, 6.0, rng.normal(0.0, 1.0),
                     ))  # fmt: skip
     return pd.DataFrame(rows, columns=SPACE_COLUMNS)
 
@@ -164,7 +164,9 @@ def test_real_game_openness_matches_supplied_shot_distance():
     ours = openness(frames, sides).rename(columns={"frame": "startFrame", "player_id": "shooterId"})
     both = shots.merge(ours, on=["startFrame", "shooterId"])
     assert len(both) > 100
-    assert (both.dist_ft - both.closestDefDist).abs().median() < 0.1
+    error = (both.dist_ft - both.closestDefDist).abs()
+    assert error.median() < 0.1
+    assert (error < 1.0).mean() > 0.95
 
 
 def test_priced_points_leave_out_coverages_too_thin_for_a_range():
@@ -176,8 +178,39 @@ def test_priced_points_leave_out_coverages_too_thin_for_a_range():
         [("screener", "blitz", 67, 0.43, 0.09, 0.09, 0.0)], columns=PRICE_COLUMNS
     )
     tables["prices"] = pd.concat([tables["prices"], blitz_price], ignore_index=True)
+    tables["pick_coverage_direct"] = tables["pick_coverage"]
     points = report.priced_points(
         tables, price_role="screener", role="second", cov_role="second_cov"
     )
     assert set(points.coverage) == {"show", "drop"}
     assert {"mean_delta_ft", "lo", "hi", "points_per_pick"} <= set(points.columns)
+
+
+def test_direct_table_counts_only_picks_that_led_directly_to_an_outcome():
+    tables = _tables()
+    index = ["cov_role", "role", "offset", "coverage"]
+    every = tables["pick_coverage"].set_index(index).n
+    direct = tables["pick_coverage_direct"].set_index(index).n
+    cell = ("second_cov", "second", report.HEADLINE_OFFSETS[0], "show")
+    assert direct[cell] == every[cell] / 2  # the fixture marks every other pick direct
+
+
+def test_omnibus_p_is_blank_for_coverages_too_thin_to_be_in_the_test():
+    space = _space()
+    thin = space[space.action_id == space.action_id.iloc[0]].assign(
+        second_cov="blitz", action_id="thin"
+    )
+    sensitivity = report.sensitivity_table({(3.0, -15): space}, n_boot=50)
+    tables = report.build_tables(
+        pd.concat([space, thin]), _depth(space), _prices(), sensitivity, n_boot=50, n_perm=50
+    )
+    by_cov = tables["pick_coverage"][tables["pick_coverage"].cov_role == "second_cov"]
+    assert "permutation_p" not in by_cov.columns
+    assert by_cov[by_cov.coverage == "blitz"].omnibus_p.isna().all()
+    assert by_cov[by_cov.coverage == "show"].omnibus_p.notna().all()
+
+
+def test_reproduce_fails_clearly_when_there_are_no_games(tmp_path, capsys):
+    (tmp_path / "data" / "matches").mkdir(parents=True)
+    assert cli.main(["reproduce", "--data-dir", str(tmp_path), "--out", str(tmp_path / "o")]) == 2
+    assert "download_data.sh" in capsys.readouterr().err

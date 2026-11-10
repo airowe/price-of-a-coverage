@@ -13,6 +13,7 @@ from coverage_price.actions import collect_actions, control_moments  # noqa: E40
 from coverage_price.constants import BASELINE_OFFSET, FPS, MAX_PRED_ERROR_FT  # noqa: E402
 from coverage_price.depth import screener_defender_depth  # noqa: E402
 from coverage_price.eventstudy import (  # noqa: E402
+    PERMUTATION_MIN_N,
     frames_needed,
     gap_between,
     permutation_p,
@@ -139,10 +140,10 @@ def _pick_coverage(space: pd.DataFrame, n_boot: int, n_perm: int) -> pd.DataFram
                 table = summarise(cell, [cov_role], n_boot=n_boot).rename(
                     columns={cov_role: "coverage"}
                 )
+                # One test across every coverage with enough picks; not a pairwise p-value.
                 p = permutation_p(cell, cov_role, n_perm=n_perm)
-                parts.append(
-                    table.assign(cov_role=cov_role, role=role, offset=offset, permutation_p=p)
-                )
+                table["omnibus_p"] = np.where(table.n >= PERMUTATION_MIN_N, p, np.nan)
+                parts.append(table.assign(cov_role=cov_role, role=role, offset=offset))
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
 
@@ -208,6 +209,8 @@ def build_tables(
     return {
         "curves": _curves(space, n_boot),
         "pick_coverage": _pick_coverage(space, n_boot, n_perm),
+        # The season aggregates count direct picks only, so the priced comparison does too.
+        "pick_coverage_direct": _pick_coverage(space[space.direct.astype(bool)], n_boot, n_perm),
         "gaps": _gaps(space, n_boot),
         "controls": summarise(controls, ["role", "offset"], n_boot=n_boot),
         "depth_by_label": depth_by_label,
@@ -257,10 +260,12 @@ def priced_points(
 ) -> pd.DataFrame:
     """Coverages with both a tracked space-created range and a season price.
 
+    The tracked side uses direct picks only, the same population the season file prices.
+
     Coverages too thin for a range in the tracked games (blitz, ice) are left out:
     a point from a handful of picks would set the axis and say nothing.
     """
-    coverage = tables["pick_coverage"]
+    coverage = tables["pick_coverage_direct"]
     if coverage.empty:
         return pd.DataFrame(columns=["coverage", "mean_delta_ft", "lo", "hi", "points_per_pick"])
     space = coverage[
@@ -294,7 +299,7 @@ def figure_space_vs_points(tables: dict[str, pd.DataFrame], path: Path) -> None:
         defender = "screener's" if role == "second" else "handler's"
         ax.set_title(f"{ROLE_NAMES[role]}, by how the {defender} defender played it", fontsize=11)
         ax.set_xlabel(
-            f"Space created for the {ROLE_NAMES[role].lower()} at +1 s (ft)\n10 tracked games"
+            f"Space created for the {ROLE_NAMES[role].lower()} at +1 s (ft)\n10 tracked games, picks ending directly in a shot, assist or foul"
         )
         ax.set_ylabel(f"Points per pick, {price_role}, full season")
         ax.spines[["top", "right"]].set_visible(False)

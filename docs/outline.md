@@ -114,8 +114,8 @@ the tables with their counts and no range.
 - **What it does not show.** Listed in section 5.
 - **Open-source potential.** A loader for SkillCorner's basketball format, an openness
   measure with an honest quality gate, and an event-study engine that works for any
-  action. I have not checked whether `kloppy` already reads this format; check before
-  claiming a contribution there.
+  action. `kloppy`'s documented SkillCorner loader covers football only; I found no
+  mention of basketball in its docs or in a web search (not a check of its source code).
 
 ## 5. Weaknesses to state
 
@@ -169,3 +169,22 @@ Left as they are, for you to decide:
   If they update the files, the numbers could shift. Worth pinning before you submit.
 - `results/` is git-ignored, so figures in the README need to be copied somewhere tracked.
 - `uv.lock` should be committed with the code.
+
+## 8. Added after the first commit
+
+- **Figure 2 now compares like with like.** The season file prices only picks that led
+  directly to a shot, assist or foul, so the tracked side of Figure 2 uses those picks
+  too (`results/tables/pick_coverage_direct.csv`). The picture is the same: screener
+  +1.39 ft against a show (318 picks) and +0.26 against a drop (354); handler −0.13
+  when the defender goes under (121) and −1.33 over (545).
+- **Replay clips for the video.** `uv run coverage-price replay --coverage show --out
+  results/replay_show.gif` draws the pick whose team-average space created is nearest
+  the median for that coverage, so the example is typical rather than flattering. Use
+  `.mp4` instead of `.gif` for video editing. Clips are not tracked in git.
+- **Review minors fixed:** the coverage-table p-value is renamed `omnibus_p` and blank
+  for coverages too thin to be in the test; the five-a-side check counts distinct
+  players; two teams acting in the same frame are kept apart; an empty data folder
+  gives a clear error; four weak tests strengthened.
+- **README.** The current `README.md` is a complete draft (839 words, two figures)
+  written for you, not by you. The rules ask for your own words, so rewrite it in your
+  voice before submitting and keep it aligned with what you say in the video.

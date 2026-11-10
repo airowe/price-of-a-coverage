@@ -81,6 +81,26 @@ def load_events(game_dir: Path, aliases: dict[int, int] | None = None) -> dict[s
     return tables
 
 
+def _requested_frames(game_dir: Path, frame_ids: Collection[int]):
+    """Yield the parsed tracking frames whose index is in `frame_ids`.
+
+    Only requested lines are parsed: a game is 30-46 MB compressed, mostly unneeded.
+    """
+    game_dir = Path(game_dir)
+    path = game_dir / f"{game_dir.name}_tracking_data.jsonl.gz"
+    if not path.exists() or path.open("rb").read(len(_GZIP_MAGIC)) != _GZIP_MAGIC:
+        raise DataNotDownloadedError(
+            f"{path} is missing or is a Git LFS pointer. Run scripts/download_data.sh "
+            "to fetch the tracking files."
+        )
+    wanted = set(frame_ids)
+    with gzip.open(path, "rt") as fh:
+        for line in fh:
+            start = line.find(_FRAME_KEY)
+            if start >= 0 and int(line[start + len(_FRAME_KEY) : line.find(",", start)]) in wanted:
+                yield json.loads(line)
+
+
 def read_frames(
     game_dir: Path,
     game: Game,
@@ -89,33 +109,27 @@ def read_frames(
 ) -> pd.DataFrame:
     """Long table of tracked players for the requested live frames.
 
-    Only requested lines are parsed: a game is 30-46 MB compressed, mostly unneeded.
     Frames with no players on either side (dead ball) are omitted.
     """
-    game_dir = Path(game_dir)
-    path = game_dir / f"{game_dir.name}_tracking_data.jsonl.gz"
-    if not path.exists() or path.read_bytes()[:2] != _GZIP_MAGIC:
-        raise DataNotDownloadedError(
-            f"{path} is missing or is a Git LFS pointer. Run scripts/download_data.sh "
-            "to fetch the tracking files."
-        )
-    wanted, aliases, rows = set(frame_ids), aliases or {}, []
+    aliases, rows = aliases or {}, []
     sides = (("homePlayers", game.home_team_id), ("awayPlayers", game.away_team_id))
-    with gzip.open(path, "rt") as fh:
-        for line in fh:
-            start = line.find(_FRAME_KEY)
-            if (
-                start < 0
-                or int(line[start + len(_FRAME_KEY) : line.find(",", start)]) not in wanted
-            ):
-                continue
-            frame = json.loads(line)
-            if not frame["homePlayers"] or not frame["awayPlayers"]:
-                continue
-            for key, team_id in sides:
-                for p in frame[key]:
-                    rows.append((
-                        frame["frameIdx"], team_id, aliases.get(p["playerId"], p["playerId"]),
-                        p["xyz"][0], p["xyz"][1], p["predError"], bool(p["isDetected"]),
-                    ))  # fmt: skip
+    for frame in _requested_frames(game_dir, frame_ids):
+        if not frame["homePlayers"] or not frame["awayPlayers"]:
+            continue
+        for key, team_id in sides:
+            for p in frame[key]:
+                rows.append((
+                    frame["frameIdx"], team_id, aliases.get(p["playerId"], p["playerId"]),
+                    p["xyz"][0], p["xyz"][1], p["predError"], bool(p["isDetected"]),
+                ))  # fmt: skip
     return pd.DataFrame(rows, columns=FRAME_COLUMNS).astype({"is_detected": bool})
+
+
+def read_ball(game_dir: Path, frame_ids: Collection[int]) -> pd.DataFrame:
+    """Ball position for the requested live frames: frame, x, y, z (feet)."""
+    rows = [
+        (frame["frameIdx"], *frame["ball"]["xyz"])
+        for frame in _requested_frames(game_dir, frame_ids)
+        if frame.get("ball")
+    ]
+    return pd.DataFrame(rows, columns=["frame", "x", "y", "z"])

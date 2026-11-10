@@ -120,3 +120,14 @@ def test_control_moment_carries_its_chance_end_frame():
     events = _events(chances=[CHANCE])
     out = control_moments(events, collect_actions(events, GAME), GAME)
     assert out.end_frame.iloc[0] == CHANCE["endFrame"]
+
+
+def test_pick_carries_its_direct_flag():
+    out = collect_actions(
+        _events(picks=[{**PICK, "direct": True}, {**PICK, "id": "pick-2", "direct": False}]), GAME
+    )
+    assert out.direct.tolist() == [True, False]
+
+
+def test_direct_is_false_when_the_source_has_no_flag():
+    assert collect_actions(_events(picks=[PICK]), GAME).direct.tolist() == [False]
