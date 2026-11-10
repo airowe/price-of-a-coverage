@@ -1,11 +1,24 @@
 import numpy as np
 import pandas as pd
 import pytest
+from PIL import Image
 
 from conftest import AWAY, DEFAULT_AWAY_XY, DEFAULT_HOME_XY, GAME, HOME, live_frame, write_game
 from coverage_price import cli
+from coverage_price.constants import FPS
 from coverage_price.loader import load_game, read_ball
-from coverage_price.replay import REPLAY_COLUMNS, court_frames, render, typical_pick
+from coverage_price.replay import (
+    HALF_WIDTH,
+    LINK_COLUMNS,
+    RENDER_PIXELS,
+    REPLAY_COLUMNS,
+    REPLAY_OFFSETS,
+    canvas,
+    court_frames,
+    nearest_defender_links,
+    render,
+    typical_pick,
+)
 
 PICK_FRAME = 1000
 HANDLER, SCREENER, SCREENER_DEFENDER = 1, 2, 12
@@ -89,3 +102,60 @@ def test_replay_command_writes_a_clip_for_a_named_action(tmp_path):
     )
     assert code == 0 and out.stat().st_size > 1000
     assert np.isfinite(out.stat().st_size)
+
+
+def test_replay_uses_every_tracking_frame_from_one_second_before_to_three_after():
+    assert REPLAY_OFFSETS == tuple(range(-FPS, 3 * FPS + 1))
+
+
+def _positions(rows):
+    return pd.DataFrame(rows, columns=["player_id", "role", "x", "y"]).assign(offset=0)
+
+
+def test_links_join_each_attacker_to_the_closest_defender():
+    near, far = (-10.0, 3.0), (-30.0, -20.0)
+    now = _positions([
+        (HANDLER, "handler", -10.0, 0.0),
+        (SCREENER, "screener", -30.0, -16.0),
+        (3, "offence", -10.0, 7.0),
+        (SCREENER_DEFENDER, "screener_defender", *near),
+        (13, "defence", *far),
+    ])  # fmt: skip
+    links = nearest_defender_links(now).set_index("player_id")
+    assert list(links.reset_index().columns) == LINK_COLUMNS
+    assert (links.loc[HANDLER, "defender_x"], links.loc[HANDLER, "defender_y"]) == near
+    assert links.loc[HANDLER, "feet"] == pytest.approx(3.0)
+    assert (links.loc[SCREENER, "defender_x"], links.loc[SCREENER, "defender_y"]) == far
+    assert links.loc[SCREENER, "feet"] == pytest.approx(4.0)
+    assert links.loc[3, "feet"] == pytest.approx(4.0)
+
+
+def test_links_leave_out_the_ball_and_the_defenders():
+    now = _positions([
+        (HANDLER, "handler", 0.0, 0.0),
+        (13, "defence", 1.0, 0.0),
+        (-1, "ball", 0.0, 0.5),
+    ])  # fmt: skip
+    assert list(nearest_defender_links(now).player_id) == [HANDLER]
+
+
+def test_links_are_empty_when_no_defender_is_tracked():
+    now = _positions([(HANDLER, "handler", 0.0, 0.0)])
+    links = nearest_defender_links(now)
+    assert links.empty and list(links.columns) == LINK_COLUMNS
+
+
+def test_clock_sits_above_the_court_not_over_it():
+    fig, ax, clock = canvas("A typical ball screen against a show")
+    clock.set_text("-1.0 s from the screen")
+    fig.canvas.draw()
+    court_top = ax.transData.transform((0.0, HALF_WIDTH))[1]
+    assert clock.get_window_extent().y0 > court_top
+
+
+def test_render_is_a_full_hd_square(tmp_path):
+    frames = court_frames(_game(tmp_path, 1), {}, "pick-1", offsets=WINDOW)
+    path = tmp_path / "clip.gif"
+    render(frames, path, title="Show")
+    with Image.open(path) as clip:
+        assert clip.size == (RENDER_PIXELS, RENDER_PIXELS)

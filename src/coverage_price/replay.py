@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from matplotlib import animation, patches  # noqa: E402
+from matplotlib.collections import LineCollection  # noqa: E402
 
 from coverage_price.actions import collect_actions  # noqa: E402
 from coverage_price.constants import FPS, HOOP_XY  # noqa: E402
@@ -17,7 +18,13 @@ from coverage_price.depth import x_sign  # noqa: E402
 from coverage_price.loader import load_events, load_game, read_ball, read_frames  # noqa: E402
 
 REPLAY_COLUMNS = ["offset", "player_id", "role", "x", "y"]
-REPLAY_OFFSETS = tuple(range(-25, 76, 2))  # -1 s to +3 s at 12.5 frames a second
+REPLAY_OFFSETS = tuple(range(-FPS, 3 * FPS + 1))  # -1 s to +3 s, every tracking frame
+LINK_COLUMNS = ["player_id", "x", "y", "defender_x", "defender_y", "feet"]
+RENDER_PIXELS = 1080
+_DPI = 150
+_ATTACKERS = ("handler", "screener", "offence")
+_DEFENDERS = ("screener_defender", "defence")
+_LINK_STYLE = {"color": "#9ca3af", "lw": 1.4, "ls": (0, (3, 2))}
 BALL_ID = -1
 # FIBA half court in feet: 28 m x 15 m court, 4.9 m x 5.8 m key, 6.75 m arc, 0.9 m corners.
 BASELINE_X, HALF_WIDTH = -45.93, 24.61
@@ -100,27 +107,63 @@ def _draw_court(ax) -> None:
     ax.axis("off")
 
 
+def nearest_defender_links(now: pd.DataFrame) -> pd.DataFrame:
+    """For one moment, each offensive player joined to the closest defender. Drawn as
+    a guide to the eye: unlike the analysis, it applies no tracking-error filter."""
+    attackers = now[now.role.isin(_ATTACKERS)]
+    defenders = now[now.role.isin(_DEFENDERS)]
+    if attackers.empty or defenders.empty:
+        return pd.DataFrame(columns=LINK_COLUMNS)
+    gaps = attackers[["x", "y"]].to_numpy()[:, None, :] - defenders[["x", "y"]].to_numpy()[None]
+    feet = np.hypot(gaps[..., 0], gaps[..., 1])
+    closest = defenders.iloc[feet.argmin(axis=1)]
+    return pd.DataFrame({
+        "player_id": attackers.player_id.to_numpy(),
+        "x": attackers.x.to_numpy(),
+        "y": attackers.y.to_numpy(),
+        "defender_x": closest.x.to_numpy(),
+        "defender_y": closest.y.to_numpy(),
+        "feet": feet.min(axis=1),
+    })[LINK_COLUMNS]  # fmt: skip
+
+
+def canvas(title: str = ""):
+    """A square figure with the court drawn, the title above it and the clock line
+    between the title and the court. Returns (figure, axes, clock text)."""
+    inches = RENDER_PIXELS / _DPI
+    fig, ax = plt.subplots(figsize=(inches, inches), dpi=_DPI)
+    _draw_court(ax)
+    fig.suptitle(title, fontsize=14, y=0.965)
+    clock = ax.set_title("", fontsize=12, pad=8)
+    fig.subplots_adjust(top=0.9, bottom=0.11, left=0.04, right=0.96)
+    return fig, ax, clock
+
+
 def render(frames: pd.DataFrame, path: Path, title: str = "") -> None:
     """Write the clip as a GIF, or an MP4 if `path` ends in .mp4 (needs ffmpeg)."""
     offsets = sorted(frames.offset.unique())
     step = int(np.median(np.diff(offsets))) if len(offsets) > 1 else 1
-    fig, ax = plt.subplots(figsize=(6.4, 6.4))
-    _draw_court(ax)
+    fig, ax, clock = canvas(title)
+    links = LineCollection([], zorder=2, **_LINK_STYLE)
+    ax.add_collection(links)
+    ax.plot([], [], label="Nearest defender", **_LINK_STYLE)
     dots = {
         role: ax.scatter([], [], s=size, color=colour, label=label, zorder=3, edgecolors="white")
         for role, (colour, size, label) in _STYLE.items()
     }
-    clock = ax.text(0.5, 0.97, "", transform=ax.transAxes, fontsize=12, ha="center", va="top")
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=3, frameon=False, fontsize=9)
-    ax.set_title(title)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=4, frameon=False, fontsize=9)
 
     def draw(offset):
         now = frames[frames.offset == offset]
         for role, dot in dots.items():
             dot.set_offsets(now.loc[now.role == role, ["x", "y"]].to_numpy().reshape(-1, 2))
+        pairs = nearest_defender_links(now)
+        links.set_segments(
+            pairs[["x", "y", "defender_x", "defender_y"]].to_numpy(dtype=float).reshape(-1, 2, 2)
+        )
         seconds = offset / FPS + 0.0  # avoid "-0.0"
         clock.set_text(f"{seconds:+.1f} s from the screen")
-        return [*dots.values(), clock]
+        return [*dots.values(), links, clock]
 
     clip = animation.FuncAnimation(fig, draw, frames=offsets, blit=False)
     fps = FPS / step
@@ -129,5 +172,5 @@ def render(frames: pd.DataFrame, path: Path, title: str = "") -> None:
         if str(path).endswith(".mp4")
         else animation.PillowWriter(fps=fps)
     )
-    clip.save(path, writer=writer, dpi=110)
+    clip.save(path, writer=writer, dpi=_DPI)
     plt.close(fig)
