@@ -1,5 +1,8 @@
 data/
-results/
+# Generated output. The two figures are tracked so the README can show them.
+results/*
+!results/fig1_curves.png
+!results/fig2_space_vs_points.png
 .venv/
 __pycache__/
 *.pyc
