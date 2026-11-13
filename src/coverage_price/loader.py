@@ -13,6 +13,7 @@ PLAYER_ID_COLUMNS = frozenset({
     "ballhandlerDefId", "screenerDefId", "setterId", "receiverId", "setterDefId",
     "receiverDefId", "cutterId", "cutterDefId", "playerId", "defenderId",
 })  # fmt: skip
+PLAYER_LIST_COLUMNS = frozenset({"offPlayerIds", "defPlayerIds"})
 FRAME_COLUMNS = ["frame", "team_id", "player_id", "x", "y", "pred_error", "is_detected"]
 _GZIP_MAGIC = b"\x1f\x8b"
 _FRAME_KEY = '"frameIdx":'
@@ -78,6 +79,10 @@ def load_events(game_dir: Path, aliases: dict[int, int] | None = None) -> dict[s
         for table in tables.values():
             for column in PLAYER_ID_COLUMNS.intersection(table.columns):
                 table[column] = table[column].map(lambda v: aliases.get(v, v))
+            for column in PLAYER_LIST_COLUMNS.intersection(table.columns):
+                table[column] = table[column].map(
+                    lambda ids: [aliases.get(v, v) for v in ids] if isinstance(ids, list) else ids
+                )
     return tables
 
 

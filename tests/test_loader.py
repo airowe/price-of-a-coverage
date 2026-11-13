@@ -34,6 +34,17 @@ def test_load_events_returns_one_table_per_family_and_applies_aliases(tmp_path):
     assert tables["shots"].empty
 
 
+def test_load_events_applies_aliases_inside_player_id_lists(tmp_path):
+    duplicate, canonical = 501, 500
+    events = {
+        "chances": [{"id": "c1", "offPlayerIds": [1, duplicate], "defPlayerIds": [duplicate]}]
+    }
+    game_dir = write_game(tmp_path, GAME, events=events, frames=[])
+    chance = load_events(game_dir, aliases={duplicate: canonical})["chances"].iloc[0]
+    assert list(chance.offPlayerIds) == [1, canonical]
+    assert list(chance.defPlayerIds) == [canonical]
+
+
 def test_load_events_keeps_null_player_ids_null(tmp_path):
     events = {"shots": [{"id": "s1", "shooterId": 1, "blockerId": None}]}
     game_dir = write_game(tmp_path, GAME, events=events, frames=[])
