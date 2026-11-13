@@ -188,3 +188,61 @@ Left as they are, for you to decide:
 - **README.** The current `README.md` is a complete draft (839 words, two figures)
   written for you, not by you. The rules ask for your own words, so rewrite it in your
   voice before submitting and keep it aligned with what you say in the video.
+
+## 9. The other calls
+
+Numbers only, from `results/summary.json` (`other_calls`) and `results/menus.csv` after a
+full `uv run coverage-price reproduce`. Design: `docs/superpowers/specs/2026-11-13-the-other-calls-design.md`.
+
+- **Fixed before any menu was seen:**
+  - A player is offered in a role only with at least 30 direct picks in it (`min_role_picks`).
+  - Rates are shrunk toward the league as if each player had 50 extra picks at the league
+    rate (`prior_picks`).
+  - Coverages are pooled.
+  - Pair price = handler rate + screener rate − (handler's assists to the screener × league
+    points per screener basket, 2.14).
+- **Picks priced:** 1,316 picks in 10 games whose pick frame and baseline frame both pass
+  the tracking gate with five a side. 1,299 have at least one pair
+  beside the one used; 17 were left out because no other pair passed the 30-pick rule.
+  - Menus run to a median of 5 pairs (max 12).
+  - In 173 picks the pair actually used was itself below 30 picks in a role.
+- **Too close to call:** in 80.4% of the 1,299 picks, the pair used cannot be told apart
+  from the best pair on its menu: the gap between their prices sits inside its own 95%
+  interval, and a player both pairs share in the same role cancels out. In 270 of those
+  1,299 the pair used *is* the best pair, which counts as too close; among the other 1,029
+  the share is 75.3% (775 picks).
+- **Average gap:** the best pair's price minus the used pair's is 0.115 points per direct
+  pick, 95% range 0.104–0.125, resampling the 10 games. Quartiles: 0.023 / 0.095 / 0.181;
+  90th percentile 0.265.
+- **Worked moment:** `pick-114234-4-121`, chosen under the first rule (fourth quarter, margin
+  ≤ 6). That set has 162 picks across 7 games; this is its median-gap pick (gap 0.099).
+  Fourth quarter, margin 6. Clip: `uv run coverage-price replay --action-id
+  pick-114234-4-121 --out results/worked_moment.mp4`.
+
+  | Pair (handler + screener) | Points per direct pick | 95% | |
+  |---|---|---|---|
+  | Santiago Yusta + Devin Robinson | 0.897 | 0.713–1.080 | best |
+  | Trae Bell-Haynes + Devin Robinson | 0.803 | 0.664–0.942 | too close |
+  | Devin Robinson + Erik Stevenson | 0.798 | 0.463–1.132 | **used**, too close, below 30 |
+  | Santiago Yusta + Bojan Dubljevic | 0.766 | 0.587–0.944 | |
+  | Trae Bell-Haynes + Bojan Dubljevic | 0.673 | 0.540–0.806 | too close |
+
+  The table is for you to read from; it is not a README table.
+- **Weaknesses to state:**
+  - Season prices average over many situations; the moment's score, clock, matchups and
+    coverage are not priced.
+  - Only who runs the ball screen is on the menu, not other kinds of action.
+  - Prices are per direct pick, about half of all picks.
+  - The handler-to-screener overlap is estimated, not counted.
+  - Screener points include the screener's own assists (598 of them, about a quarter of
+    screener points), not only his baskets. Any screener assist to the handler is then in
+    both players' totals; the aggregates lump those into `screener_assist_to_other`, so
+    this second overlap cannot be removed. It favors pairs whose screener passes.
+  - The too-close test treats a player's handler and screener estimates as independent,
+    and gives the handler's assist rate no uncertainty of its own.
+  - Yusta + Dubljevic's own interval overlaps the best pair's, yet the two can be told
+    apart: both have Yusta handling, so only the screeners differ. A reader comparing the
+    intervals by eye will expect "too close", so the text has to say why it isn't.
+  - Ten tracked games, one league, one season.
+- **Reading the result:** the season numbers usually cannot separate the pair used from the
+  best pair on the same floor. How you frame that is your call.
