@@ -10,7 +10,7 @@ open ACB 2025-26 data.
 Every game plan includes a decision about ball screens: drop the big, show, or switch.
 Coaches judge those choices by what they give up, and public numbers usually stop at
 points per possession. Points are the last link in the chain. The first link is space:
-who gets open, by how much, and how quickly the defence gets it back. Tracking data can
+who gets open, by how much, and how quickly the defense gets it back. Tracking data can
 measure that directly, so I did.
 
 I started somewhere else. My first idea was that a defender's closing speed and angle
@@ -59,6 +59,19 @@ at 3 to 6 ft, and nothing beyond 6 ft.
 The roles that gain space are the ones that score. Over the season, screeners produce
 0.31 points per pick against a show and 0.22 against a drop; handlers produce 0.77 when
 their defender goes under the screen and 0.70 when he goes over.
+
+## The other calls
+
+A ball screen also means choosing who runs it. For each of 1,299 direct picks, I priced
+every handler–screener pair the five on the floor could have used. A player counts in a
+role only with at least 30 season picks there, and each price is the pair's season points
+per direct pick, pulled toward the league average. The pair actually used was the
+best-priced pair in 270 picks. On average the best pair was worth 0.115 more points per
+pick (0.104 to 0.125). But in 80% of picks the two cannot be told apart: the gap sits
+inside its own 95% range. In a fourth-quarter pick with a 6-point margin, Robinson handled
+with Stevenson screening, priced at 0.80; Yusta handling with Robinson screening priced at
+0.90, too close to call. Season rates ignore the moment, so this shows how rarely a season
+of picks separates one pair from another, not which pair a coach should have chosen.
 
 ## What this does not show
 
