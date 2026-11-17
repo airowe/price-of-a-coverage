@@ -1,8 +1,8 @@
 # Video script: The Price of a Coverage
 
-Limit: three minutes, presented and voiced by you. The spoken lines total 413 words: about 2.8 minutes
+Limit: three minutes, presented and voiced by you. The spoken lines total 430 words: about 2.9 minutes
 at a measured 150 words a minute. Time yourself once before recording; if you run past
-2:50, cut the "What it doesn't show" section to its first sentence.
+2:55, cut the "What it doesn't show" section to its first sentence.
 
 Every number here matches the README and `results/tables/`. If you change a number in
 one place, change it in the other: the rules ask for the README and video to agree.
@@ -13,6 +13,8 @@ Clips to record or export first:
   `uv run coverage-price replay --coverage show --out results/replay_show.mp4`)
 - `results/fig1_curves.png` and `results/fig2_space_vs_points.png`
 - A screen recording of `uv run coverage-price reproduce` finishing (about 16 seconds)
+- The worked moment: `uv run coverage-price replay --action-id pick-114234-4-121 --out
+  results/worked_moment.mp4`
 
 ---
 
@@ -31,11 +33,10 @@ Clips to record or export first:
 
 > I didn't start here. My first idea was that how fast a defender closes out would
 > predict makes better than how close he is. Ten games couldn't show it: makes are too
-> rare and too noisy. Space isn't. Tracking gives you the distance to the nearest
-> defender for every player, twenty-five times a second. So I stopped asking whether
+> rare and too noisy. Space isn't. So I stopped asking whether
 > the shot went in, and asked what created the room to take it.
 
-## 0:45 – 1:25 · How it works
+## 0:45 – 1:20 · How it works
 
 **On screen:** the drop replay clip, then a slow scroll of Figure 1's axes.
 
@@ -46,11 +47,10 @@ Clips to record or export first:
 > Then, for each of fifteen hundred ball screens, I compare that distance just before
 > the screen with the three seconds after it. That change is the space created.
 >
-> Two things keep it honest. The ranges come from resampling whole games, not single
-> plays. And because the coverage labels come from the same tracking, I also measured
+> Because the coverage labels come from the same tracking, I also measured
 > how far below the screen the big man's defender stands, with no labels at all.
 
-## 1:25 – 2:15 · What I found
+## 1:20 – 2:00 · What I found
 
 **On screen:** Figure 1, then Figure 2.
 
@@ -59,8 +59,7 @@ Clips to record or export first:
 > games.
 >
 > Against a show the screener gains a foot and a half and the most open teammate two
-> feet. And the ball handler isn't contained: two seconds later he's nearly as free as
-> when he started.
+> feet.
 >
 > The label-free check agrees. The deeper that defender plays, the less space opens,
 > down to nothing beyond six feet.
@@ -68,21 +67,33 @@ Clips to record or export first:
 > And space lines up with scoring. Across the full season, screeners score about forty
 > percent more per pick against a show than against a drop.
 
-## 2:15 – 2:35 · What it doesn't show
+## 2:00 – 2:30 · The other calls
+
+**On screen:** the worked-moment replay, then a text card with three pairs and their
+prices only, no ranges: Yusta + Robinson 0.90 (best), Robinson + Stevenson 0.80 (used),
+Yusta + Dubljevic 0.77.
+
+> The offense has a call too: who runs the screen. Here's a typical one: fourth quarter,
+> six-point game. Robinson handles, Stevenson screens, worth about point eight points a
+> pick on season numbers. The best pair on the floor, Yusta handling and Robinson
+> screening, is worth point nine. But that gap sits inside the uncertainty. In four of
+> every five picks, a season of data can't tell the pair they ran from the best one.
+
+## 2:30 – 2:42 · What it doesn't show
 
 **On screen:** you on camera.
 
 > A caution. Teams choose their coverage, so this describes what happened, not what
-> would happen if a team switched. And it's ten games from one league.
+> would happen if a team switched. And season prices ignore the moment. And it's ten
+> games from one league.
 
-## 2:35 – 2:50 · Open source
+## 2:42 – 2:55 · Open source
 
 **On screen:** the terminal recording of `reproduce` finishing, then the repository page.
 
 > Everything reproduces with one command in under a minute. The package has three
 > reusable parts: a loader for SkillCorner's basketball data, the space measure, and
-> an engine that works for any action. Next, I'd contribute the loader to kloppy and
-> run this on a full season. Thanks for watching.
+> an engine that works for any action. Thanks for watching.
 
 ---
 
@@ -99,13 +110,18 @@ Clips to record or export first:
 | "about forty percent more" | Season points per pick, screener: 0.306 against a show, 0.217 against a drop (+41%) |
 | "fifteen hundred ball screens" | 1,520 picks |
 | "under a minute" | About 16 seconds on a laptop, plus the one-time data download |
+| "a typical one" | `pick-114234-4-121`: the median-gap pick of the 162 fourth-quarter picks with the margin within 6, chosen by a rule fixed before any menu was seen |
+| "about point eight" | Robinson + Stevenson (used): 0.798 points per direct pick |
+| "point nine" | Yusta + Robinson (best): 0.897 |
+| "inside the uncertainty" | Gap 0.099 is inside the 95% interval of the difference |
+| "four of every five" | 80.4% of 1,299 picks; 75.3% (775 of 1,029) leaving out picks where the pair used was the best |
 
-Two wording notes:
+Wording notes:
 
 - "The deeper that defender plays, the less space opens" is true from 3 ft down. The two
   shallowest groups (above the screen, and 0–3 ft below it) both sit at about 1 ft and
   can't be told apart. If you have a spare second, "once he's more than three feet below
   the screen" is the precise version.
-- I say "contributing the loader to kloppy" as a next step. kloppy's documentation shows
-  SkillCorner support for football only; I didn't read its source code, so don't claim
-  on camera that it definitely lacks basketball support.
+- Keep the card to prices. Yusta + Dubljevic's range overlaps the best pair's, yet the
+  two can be told apart because both have Yusta handling; ranges on screen would mislead.
+- The kloppy next step was cut for time and stays in the README only.
